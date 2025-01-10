@@ -3,6 +3,11 @@
 #include <string>
 #include <memory>
 #include <format>
+#include <atomic>
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 namespace LimboEngine
 {
@@ -25,12 +30,25 @@ namespace LimboEngine
         // Log a message at a given level
         void Log(LogLevel level, const std::string& message, const char* file, int line);
 
+        ~Logger();
+
+		Logger(const Logger&) = delete;
+		Logger& operator=(const Logger&) = delete;
     private:
         // Private constructor for singleton
-        Logger() = default;
+        Logger();
 
         // Utility method to convert LogLevel -> string
         std::string LevelToString(LogLevel level);
+
+        // Dedicated function run by the logging thread
+        void ThreadRun();
+
+        std::atomic<bool> m_Running;
+		std::thread m_Thread;
+		std::queue<std::string> m_MessageQueue;
+		std::mutex m_Mutex;
+		std::condition_variable m_CondVar;
     };
 
     //

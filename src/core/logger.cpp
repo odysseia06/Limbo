@@ -1,6 +1,10 @@
 #include "core/logger.h"
 #include <iostream>
 #include <mutex>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <thread>
 
 namespace LimboEngine
 {
@@ -13,18 +17,84 @@ namespace LimboEngine
         return instance;
     }
 
+	Logger::Logger()
+		: m_Running(true)
+	{
+		// Start the logging thread
+		m_Thread = std::thread(&Logger::ThreadRun, this);
+	}
+
+	Logger::~Logger()
+	{
+        {
+            m_Running = false;
+
+			std::unique_lock<std::mutex> lock(m_Mutex);
+			m_CondVar.notify_one();
+        }
+
+		if (m_Thread.joinable())
+		{
+			m_Thread.join();
+		}
+	}
+
     void Logger::Log(LogLevel level, const std::string& message, const char* file, int line)
     {
-        std::lock_guard<std::mutex> lock(loggerMutex);
+		std::ostringstream oss;
 
-        // Convert the log level to a string
-        std::string levelStr = LevelToString(level);
+		auto now = std::chrono::system_clock::now();
+		std::time_t tt = std::chrono::system_clock::to_time_t(now);
+        std::tm localTm;
 
-        // For now, just print to standard output
-        std::cout << "[" << levelStr << "] "
-            << "[" << file << ":" << line << "] "
-            << message << std::endl;
+#if defined(_WIN32)
+		localtime_s(&localTm, &tt);
+#else
+		localtime_r(&tt, &localTm);
+#endif
+
+		oss << "[" << std::put_time(&localTm, "%Y-%m-%d %H:%M:%S") << "] "
+			<< "[" << LevelToString(level) << "] "
+			<< "[TID:" << std::this_thread::get_id() << "] "
+			<< "[" << file << ":" << line << "] "
+			<< message;
+
+		{
+			std::unique_lock<std::mutex> lock(m_Mutex);
+			m_MessageQueue.push(oss.str());
+		}
+
+		m_CondVar.notify_one();
     }
+
+	void Logger::ThreadRun() 
+	{
+		while (m_Running)
+		{
+			std::unique_lock<std::mutex> lock(m_Mutex);
+
+			m_CondVar.wait(lock, [this] { return !m_MessageQueue.empty() || !m_Running; });
+
+			while (!m_MessageQueue.empty())
+			{
+				std::string front = std::move(m_MessageQueue.front());
+				m_MessageQueue.pop();
+
+				lock.unlock();
+
+				std::cout << front << std::endl;
+
+				lock.lock();
+			}
+		}
+		// Drain any final messages
+		while (!m_MessageQueue.empty())
+		{
+			std::string front = std::move(m_MessageQueue.front());
+			m_MessageQueue.pop();
+			std::cout << front << std::endl;
+		}
+	}
 
     std::string Logger::LevelToString(LogLevel level)
     {
