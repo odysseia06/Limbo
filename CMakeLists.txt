@@ -23,7 +23,13 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
     "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 
 # Add source to this project's executable.
-add_executable(Limbo "Limbo.cpp" "Limbo.h")
+add_executable(Limbo 
+"Limbo.cpp" 
+"Limbo.h"
+"src/core/logger.cpp"
+"src/core/logger.h"
+"src/core/macros.h"
+)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET Limbo PROPERTY CXX_STANDARD 20)
